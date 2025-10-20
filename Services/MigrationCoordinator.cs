@@ -11,10 +11,10 @@ using static System.Runtime.InteropServices.Marshalling.IIUnknownCacheStrategy;
 
 namespace TestParse.Services
 {
-    public class DatabaseMigrationCoordinator : IDatabaseMigrationCoordinator
+    public class MigrationCoordinator : IMigrationCoordinator
     {
-        private readonly IDatabaseSchemaReader _schemaReader;
-        private readonly IScriptGenerationService _scriptGenerationService;
+        private readonly ISchemaReader _schemaReader;
+        private readonly IScriptGenerator _scriptGenerationService;
         private readonly IDataMigrationService _dataMigrationService;
         private readonly string _sourceConnectionString;
         private readonly string _targetConnectionString;
@@ -24,13 +24,13 @@ namespace TestParse.Services
         private readonly SqlConnectionManager sourceConn;
         private readonly SqlConnectionManager targetConn;
 
-    public DatabaseMigrationCoordinator(string sourceConnectionString,
-                                        string targetConnectionString,
-                                        IDatabaseSchemaReader schemaService,
-                                        IScriptGenerationService scriptGenerationService,
-                                        IDataMigrationService dataMigrationService,
-                                        IScriptExecutor scriptExecutor,
-                                        IDatabaseComparator databaseComparator)
+    public MigrationCoordinator(string sourceConnectionString,
+                                string targetConnectionString,
+                                ISchemaReader schemaService,
+                                IScriptGenerator scriptGenerationService,
+                                IDataMigrationService dataMigrationService,
+                                IScriptExecutor scriptExecutor,
+                                IDatabaseComparator databaseComparator)
         {
             _schemaReader = schemaService;
             _scriptGenerationService = scriptGenerationService;

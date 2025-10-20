@@ -10,7 +10,7 @@ using TestParse.Models.InfoModels;
 
 namespace TestParse.Services.Interfaces
 {
-    public interface IScriptGenerationService
+    public interface IScriptGenerator
     {
         Task GenerateCreateTableScriptsAsync(IEnumerable<TableDifference> missingTables, SqlConnectionManager sourceConn);
         Task GenerateMissingColumnScriptsAsync(IEnumerable<ColumnDifference> missingColumns, SqlConnectionManager sourceConn);

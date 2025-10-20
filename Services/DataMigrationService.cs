@@ -11,11 +11,11 @@ namespace TestParse.Services
 {
     public class DataMigrationService : IDataMigrationService
     {
-        private readonly IScriptGenerationService _scriptGenerationService;
+        private readonly IScriptGenerator _scriptGenerationService;
         private readonly IMigrationScript _migrationScript;
         private readonly IScriptExecutor _scriptExecutor;
 
-        public DataMigrationService(IScriptGenerationService scriptGenerationService, IMigrationScript migrationScript, IScriptExecutor scriptExecutor)
+        public DataMigrationService(IScriptGenerator scriptGenerationService, IMigrationScript migrationScript, IScriptExecutor scriptExecutor)
         {
             _scriptGenerationService = scriptGenerationService;
             _migrationScript = migrationScript;

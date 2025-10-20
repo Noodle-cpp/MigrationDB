@@ -8,7 +8,7 @@ using TestParse.Models;
 
 namespace TestParse.Services.Interfaces
 {
-    public interface IDatabaseMigrationCoordinator
+    public interface IMigrationCoordinator
     {
         Task<DatabaseComparisonResult> CompareDatabasesAsync();
         Task SynchronizeDatabasesAsync(DatabaseComparisonResult comparisonResult);

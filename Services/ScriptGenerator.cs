@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+﻿    using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,11 +13,11 @@ using TestParse.Services.Interfaces;
 
 namespace TestParse.Services
 {
-    public class ScriptGenerationService : IScriptGenerationService
+    public class ScriptGenerator : IScriptGenerator
     {
         private readonly IMigrationScript _migrationScript;
 
-        public ScriptGenerationService(IMigrationScript migrationScript)
+        public ScriptGenerator(IMigrationScript migrationScript)
         {
             _migrationScript = migrationScript;
         }

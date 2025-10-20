@@ -32,22 +32,22 @@ internal class Program
         SetupConfiguration();
         var services = SetupDependencyInjection();
 
-        var databaseMigrationService = services.GetRequiredService<IDatabaseMigrationCoordinator>();
-        var dataMigrationService = services.GetRequiredService<IDataMigrationService>();
+        var coordinator = services.GetRequiredService<IMigrationCoordinator>();
+        var dataMigration = services.GetRequiredService<IDataMigrationService>();
 
         try
         {
 
             Console.WriteLine("Начинаем сравнение баз данных...");
-            var comparisonResult = await databaseMigrationService.CompareDatabasesAsync();
+            var comparisonResult = await coordinator.CompareDatabasesAsync();
 
             Console.WriteLine("Сравнение завершено. Результаты:");
             PrintComparisonResults(comparisonResult);
 
             Console.WriteLine("Начинаем синхронизацию...");
             
-            await databaseMigrationService.GenerateScriptsAsync(comparisonResult);
-            await databaseMigrationService.SynchronizeDatabasesAsync(comparisonResult).ConfigureAwait(false) ;
+            await coordinator.GenerateScriptsAsync(comparisonResult);
+            await coordinator.SynchronizeDatabasesAsync(comparisonResult).ConfigureAwait(false) ;
 
             Console.WriteLine("Синхронизация завершена!");
         }

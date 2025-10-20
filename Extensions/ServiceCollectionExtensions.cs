@@ -14,8 +14,8 @@ namespace TestParse.Extensions
         public static IServiceCollection AddDatabaseMigrationServices(this IServiceCollection services,
         string sourceConnectionString, string targetConnectionString, DatabaseType databaseType)
         {
-            services.AddScoped<IDatabaseSchemaReader, DatabaseSchemaReader>();
-            services.AddScoped<IScriptGenerationService, ScriptGenerationService>();
+            services.AddScoped<ISchemaReader, SchemaReader>();
+            services.AddScoped<IScriptGenerator, ScriptGenerator>();
             services.AddScoped<IDataMigrationService, DataMigrationService>();
             services.AddScoped<IScriptExecutor, ScriptExecutor>();
 
@@ -33,12 +33,12 @@ namespace TestParse.Extensions
                 };
             });
 
-            services.AddScoped<IDatabaseMigrationCoordinator>(provider =>
-                new DatabaseMigrationCoordinator(
+            services.AddScoped<IMigrationCoordinator>(provider =>
+                new MigrationCoordinator(
                     sourceConnectionString,
                     targetConnectionString,
-                    provider.GetRequiredService<IDatabaseSchemaReader>(),
-                    provider.GetRequiredService<IScriptGenerationService>(),
+                    provider.GetRequiredService<ISchemaReader>(),
+                    provider.GetRequiredService<IScriptGenerator>(),
                     provider.GetRequiredService<IDataMigrationService>(),
                     provider.GetRequiredService<IScriptExecutor>(),
                     provider.GetRequiredService<IDatabaseComparator>()));

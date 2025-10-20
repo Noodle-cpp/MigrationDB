@@ -8,7 +8,7 @@ using TestParse.Models.InfoModels;
 
 namespace TestParse.Services.Interfaces
 {
-    public interface IDatabaseSchemaReader
+    public interface ISchemaReader
     {
         Task<Dictionary<string, List<ColumnInfo>>> GetDatabaseTablesAsync(string connectionString);
         Task<List<IndexInfo>> GetIndexesAsync(Dictionary<string, List<ColumnInfo>> tables, string connectionString);

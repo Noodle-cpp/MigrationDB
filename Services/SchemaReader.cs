@@ -12,11 +12,11 @@ using TestParse.Services.Interfaces;
 
 namespace TestParse.Services
 {
-    public class DatabaseSchemaReader : IDatabaseSchemaReader
+    public class SchemaReader : ISchemaReader
     {
         private readonly IMigrationScript _migrationScript;
 
-        public DatabaseSchemaReader(IMigrationScript migrationScript)
+        public SchemaReader(IMigrationScript migrationScript)
         {
             _migrationScript = migrationScript;
         }

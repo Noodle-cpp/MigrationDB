@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TestParse.Helpers;
-using TestParse.Models;
+﻿using TestParse.Models;
 using TestParse.Models.InfoModels;
 using TestParse.Services.Interfaces;
 
@@ -12,39 +6,33 @@ namespace TestParse.Services
 {
     public class DatabaseComparator : IDatabaseComparator
     {
-        private readonly IDatabaseSchemaReader _schemaService;
+        private readonly ISchemaReader _schemaReader;
 
-        public DatabaseComparator(IDatabaseSchemaReader schemaService)
+        public DatabaseComparator(ISchemaReader schemaReader)
         {
-            _schemaService = schemaService;
+            _schemaReader = schemaReader;
         }
 
         public async Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString, string targetConnectionString)
         {
             var result = new DatabaseComparisonResult();
 
-            await using var sourceConn = new SqlConnectionManager(sourceConnectionString);
-            await using var targetConn = new SqlConnectionManager(targetConnectionString);
-
-            await sourceConn.OpenConnectionAsync().ConfigureAwait(false);
-            await targetConn.OpenConnectionAsync().ConfigureAwait(false);
-
-            var sourceSchemas = await _schemaService.GetSchemasAsync(sourceConnectionString).ConfigureAwait(false);
-            var targetSchemas = await _schemaService.GetSchemasAsync(targetConnectionString).ConfigureAwait(false);
+            var sourceSchemas = await _schemaReader.GetSchemasAsync(sourceConnectionString).ConfigureAwait(false);
+            var targetSchemas = await _schemaReader.GetSchemasAsync(targetConnectionString).ConfigureAwait(false);
             result.MissingSchemas = FindMissingSchemas(sourceSchemas, targetSchemas);
 
-            var sourceTables = await _schemaService.GetDatabaseTablesAsync(sourceConnectionString).ConfigureAwait(false);
-            var targetTables = await _schemaService.GetDatabaseTablesAsync(targetConnectionString).ConfigureAwait(false);
+            var sourceTables = await _schemaReader.GetDatabaseTablesAsync(sourceConnectionString).ConfigureAwait(false);
+            var targetTables = await _schemaReader.GetDatabaseTablesAsync(targetConnectionString).ConfigureAwait(false);
             result.MissingTables = FindMissingTables(sourceTables, targetTables);
 
             result.MissingColumns = FindMissingColumns(sourceTables, targetTables);
             result.DifferentColumns = FindDifferentColumns(sourceTables, targetTables);
 
-            var sourceIndexes = await _schemaService.GetIndexesAsync(sourceTables, sourceConnectionString).ConfigureAwait(false);
-            var targetIndexes = await _schemaService.GetIndexesAsync(targetTables, targetConnectionString).ConfigureAwait(false);
+            var sourceIndexes = await _schemaReader.GetIndexesAsync(sourceTables, sourceConnectionString).ConfigureAwait(false);
+            var targetIndexes = await _schemaReader.GetIndexesAsync(targetTables, targetConnectionString).ConfigureAwait(false);
             result.MissingIndexes = FindMissingIndexes(sourceIndexes, targetIndexes);
 
-            result.MissingForeignKeys = await _schemaService.GetForeignKeysAsync(sourceConnectionString).ConfigureAwait(false);
+            result.MissingForeignKeys = await _schemaReader.GetForeignKeysAsync(sourceConnectionString).ConfigureAwait(false);
 
             return result;
         }
