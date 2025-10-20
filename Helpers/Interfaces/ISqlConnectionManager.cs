@@ -2,7 +2,7 @@
 
 namespace TestParse.Helpers.Interfaces
 {
-    public interface ISqlConnectionManager
+    public interface ISqlConnectionManager : IAsyncDisposable
     {
         Task OpenConnectionWithTransactionAsync();
         Task OpenConnectionAsync();

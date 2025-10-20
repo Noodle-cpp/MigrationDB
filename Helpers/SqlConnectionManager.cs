@@ -8,7 +8,7 @@ using TestParse.Helpers.Interfaces;
 
 namespace TestParse.Helpers
 {
-    public class SqlConnectionManager : ISqlConnectionManager, IAsyncDisposable
+    public class SqlConnectionManager : ISqlConnectionManager
     {
         private readonly string _connectionString;
 

@@ -21,8 +21,8 @@ namespace TestParse.Services
 
         private readonly IScriptExecutor _scriptExecutor;
         private readonly IDatabaseComparator _databaseComparator;
-        private SqlConnectionManager sourceConn;
-        private SqlConnectionManager targetConn;
+        private readonly SqlConnectionManager sourceConn;
+        private readonly SqlConnectionManager targetConn;
 
     public DatabaseMigrationCoordinator(string sourceConnectionString,
                                         string targetConnectionString,

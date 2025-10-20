@@ -35,7 +35,8 @@ namespace TestParse.Helpers
             }
             catch (Exception)
             {
-                connection.Transaction.Rollback();
+                if(connection.Transaction is not null)
+                    connection.Transaction.Rollback();
                 throw;
             }
         }
