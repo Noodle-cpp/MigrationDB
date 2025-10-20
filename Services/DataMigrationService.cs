@@ -1,5 +1,7 @@
 ﻿using Microsoft.Data.SqlClient;
 using System.Text.RegularExpressions;
+using TestParse.Helpers;
+using TestParse.Helpers.Interfaces;
 using TestParse.Models.InfoModels;
 using TestParse.Queries;
 using TestParse.Scripts.Abstractions;
@@ -11,30 +13,27 @@ namespace TestParse.Services
     {
         private readonly IScriptGenerationService _scriptGenerationService;
         private readonly IMigrationScript _migrationScript;
+        private readonly IScriptExecutor _scriptExecutor;
 
-        public DataMigrationService(IScriptGenerationService scriptGenerationService, IMigrationScript migrationScript)
+        public DataMigrationService(IScriptGenerationService scriptGenerationService, IMigrationScript migrationScript, IScriptExecutor scriptExecutor)
         {
             _scriptGenerationService = scriptGenerationService;
             _migrationScript = migrationScript;
+            _scriptExecutor = scriptExecutor;
         }
 
-        public async Task ClearAllTablesDataAsync(string targetConnectionString, List<string> tableNames)
+        public async Task ClearAllTablesDataAsync(SqlConnectionManager targetConn, List<string> tableNames)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
-            await targetConn.OpenAsync().ConfigureAwait(false);
-
             Console.WriteLine("Очистка данных в целевой БД...");
 
-            await DisableConstraintsAsync(targetConnectionString).ConfigureAwait(false);
+            await DisableConstraintsAsync(targetConn).ConfigureAwait(false);
 
             foreach (var tableName in tableNames.AsEnumerable().Reverse())
             {
                 try
                 {
-                    var script = await _scriptGenerationService.GenerateClearDataScriptAsync(targetConnectionString, tableName).ConfigureAwait(false);
-                    await using var command = new SqlCommand(script, targetConn);
-                    var affectedRows = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-                    Console.WriteLine($"Очищена таблица: {tableName} ({affectedRows} строк)");
+                    var script = await _scriptGenerationService.GenerateClearDataScriptAsync(targetConn, tableName).ConfigureAwait(false);
+                    await _scriptExecutor.ExecuteScriptAsync(script, $"Очищена таблица: {tableName}", targetConn).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -42,23 +41,17 @@ namespace TestParse.Services
                 }
             }
 
-            await EnableConstraintsAsync(targetConnectionString).ConfigureAwait(false);
+            await EnableConstraintsAsync(targetConn).ConfigureAwait(false);
         }
 
-        public async Task MigrateTableDataAsync(string sourceConnectionString, string targetConnectionString, string tableName, List<ColumnInfo> columns)
+        public async Task MigrateTableDataAsync(SqlConnectionManager sourceConn, SqlConnectionManager targetConn, string tableName, List<ColumnInfo> columns)
         {
             try
             {
-                await using var sourceConn = new SqlConnection(sourceConnectionString);
-                await using var targetConn = new SqlConnection(targetConnectionString);
+                bool hasIdentity = await HasIdentityColumnAsync(targetConn, tableName).ConfigureAwait(false);
 
-                await sourceConn.OpenAsync().ConfigureAwait(false);
-                await targetConn.OpenAsync().ConfigureAwait(false);
-
-                bool hasIdentity = await HasIdentityColumnAsync(targetConnectionString, tableName).ConfigureAwait(false);
-
-                if (hasIdentity) await MigrateTableWithIdentityAsync(sourceConnectionString, targetConnectionString, tableName, columns).ConfigureAwait(false);
-                else await MigrateTableWithoutIdentityAsync(sourceConnectionString, targetConnectionString, tableName, columns).ConfigureAwait(false);
+                if (hasIdentity) await MigrateTableWithIdentityAsync(sourceConn, targetConn, tableName, columns).ConfigureAwait(false);
+                else await MigrateTableWithoutIdentityAsync(sourceConn, targetConn, tableName, columns).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -66,77 +59,60 @@ namespace TestParse.Services
             }
         }
 
-        private async Task DisableConstraintsAsync(string targetConnectionString)
+        private async Task DisableConstraintsAsync(SqlConnectionManager targetConn)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
-
-            await targetConn.OpenAsync().ConfigureAwait(false);
-
-            await using var command = new SqlCommand(_migrationScript.DisableConstraintsScript, targetConn);
-            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-            Console.WriteLine("Отключены все FK constraints");
+            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.DisableConstraintsScript, $"Отключены все FK constraints", targetConn).ConfigureAwait(false);
         }
 
-        private async Task EnableConstraintsAsync(string targetConnectionString)
+        private async Task EnableConstraintsAsync(SqlConnectionManager targetConn)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
-
-            await targetConn.OpenAsync().ConfigureAwait(false);
-
-            await using var command = new SqlCommand(_migrationScript.EnableConstraintsScript, targetConn);
-            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-            Console.WriteLine("Включены все FK constraints");
+            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.EnableConstraintsScript, $"Включены все FK constraints", targetConn).ConfigureAwait(false);
         }
 
-        private async Task MigrateTableWithIdentityAsync(string sourceConnectionString, string targetConnectionString, string tableName, List<ColumnInfo> columns)
+        private async Task MigrateTableWithIdentityAsync(SqlConnectionManager sourceConn, SqlConnectionManager targetConn, string tableName, List<ColumnInfo> columns)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await using var targetConn = new SqlConnection(targetConnectionString);
+            var commandParams = new Dictionary<string, object>
+            {
+                { "@TableName", tableName }
+            };
 
-            await sourceConn.OpenAsync().ConfigureAwait(false);
-            await targetConn.OpenAsync().ConfigureAwait(false);
-
-            await using var enableCommand = new SqlCommand(_migrationScript.EnableIdentityScript, targetConn);
-            enableCommand.Parameters.AddWithValue("@TableName", tableName);
-            await enableCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
-
+            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.EnableIdentityScript, $"Включены все FK constraints", targetConn, commandParams).ConfigureAwait(false);
+            
             try
             {
-                await BulkCopyTableDataAsync(sourceConnectionString, targetConnectionString, tableName, columns);
+                await BulkCopyTableDataAsync(sourceConn, targetConn, tableName, columns);
                 Console.WriteLine($"Данные перенесены (с IDENTITY): {tableName}");
+            }
+            catch (Exception)
+            {
+                await targetConn.RollbackAsync().ConfigureAwait(false);
             }
             finally
             {
-                await using var disableCommand = new SqlCommand(_migrationScript.DisableIdentityScript, targetConn);
+                await using var disableCommand = new SqlCommand(_migrationScript.DisableIdentityScript, targetConn.Connection, targetConn.Transaction);
                 disableCommand.Parameters.AddWithValue("@TableName", tableName);
                 await disableCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
         }
 
-        private async Task MigrateTableWithoutIdentityAsync(string sourceConnectionString, string targetConnectionString, string tableName, List<ColumnInfo> columns)
+        private async Task MigrateTableWithoutIdentityAsync(SqlConnectionManager sourceConn, SqlConnectionManager targetConn, string tableName, List<ColumnInfo> columns)
         {
-            await BulkCopyTableDataAsync(sourceConnectionString, targetConnectionString, tableName, columns).ConfigureAwait(false);
+            await BulkCopyTableDataAsync(sourceConn, targetConn, tableName, columns).ConfigureAwait(false);
             Console.WriteLine($"Данные перенесены (без IDENTITY): {tableName}");
         }
 
-        private async Task BulkCopyTableDataAsync(string sourceConnectionString, string targetConnectionString, string tableName, List<ColumnInfo> columns)
+        private async Task BulkCopyTableDataAsync(SqlConnectionManager sourceConn, SqlConnectionManager targetConn, string tableName, List<ColumnInfo> columns)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await using var targetConn = new SqlConnection(targetConnectionString);
+            var selectDataResult = await _scriptGenerationService.GenerateSelectDataScriptAsync(sourceConn, tableName).ConfigureAwait(false);
 
-            await sourceConn.OpenAsync().ConfigureAwait(false);
-            await targetConn.OpenAsync().ConfigureAwait(false);
-
-            var selectDataResult = await _scriptGenerationService.GenerateSelectDataScriptAsync(sourceConnectionString, tableName).ConfigureAwait(false);
-
-            await using var selectCommand = new SqlCommand(selectDataResult.Script, sourceConn);
+            await using var selectCommand = new SqlCommand(selectDataResult.Script, sourceConn.Connection);
             await using var reader = await selectCommand.ExecuteReaderAsync().ConfigureAwait(false);
 
-            using var bulkCopy = new SqlBulkCopy(targetConn)
+            using var bulkCopy = new SqlBulkCopy(targetConn.Connection, SqlBulkCopyOptions.Default, targetConn.Transaction)
             {
                 DestinationTableName = $"[{selectDataResult.SchemaName}].{tableName}",
                 BulkCopyTimeout = 300,
-                BatchSize = 5000
+                BatchSize = 5000,
             };
 
             foreach (var column in columns)
@@ -145,15 +121,11 @@ namespace TestParse.Services
             bulkCopy.WriteToServer(reader);
         }
 
-        private async Task<bool> HasIdentityColumnAsync(string targetConnectionString, string tableName)
+        private async Task<bool> HasIdentityColumnAsync(SqlConnectionManager targetConn, string tableName)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
+            var script = await _scriptGenerationService.GenerateIdentityCountScriptAsync(targetConn, tableName).ConfigureAwait(false);
 
-            await targetConn.OpenAsync().ConfigureAwait(false);
-
-            var script = await _scriptGenerationService.GenerateIdentityCountScriptAsync(targetConnectionString, tableName).ConfigureAwait(false);
-
-            await using var command = new SqlCommand(script, targetConn);
+            await using var command = new SqlCommand(script, targetConn.Connection, targetConn.Transaction);
             command.Parameters.AddWithValue("@TableName", tableName);
 
             var result = await command.ExecuteScalarAsync().ConfigureAwait(false);

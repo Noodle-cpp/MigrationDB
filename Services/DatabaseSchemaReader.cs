@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TestParse.Helpers;
 using TestParse.Models.InfoModels;
 using TestParse.Queries;
 using TestParse.Scripts.Abstractions;
@@ -24,10 +25,10 @@ namespace TestParse.Services
         {
             var tables = new Dictionary<string, List<ColumnInfo>>();
 
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync().ConfigureAwait(false);
+            await using var connection = new SqlConnectionManager(connectionString);
+            await connection.OpenConnectionAsync().ConfigureAwait(false);
 
-            await using var command = new SqlCommand(_migrationScript.GetTableInfoScript, connection);
+            await using var command = new SqlCommand(_migrationScript.GetTableInfoScript, connection.Connection);
             await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
 
             while (await reader.ReadAsync().ConfigureAwait(false))
@@ -56,10 +57,10 @@ namespace TestParse.Services
         {
             var schemas = new List<SchemaInfo>();
 
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync().ConfigureAwait(false);
+            await using var connection = new SqlConnectionManager(connectionString);
+            await connection.OpenConnectionAsync().ConfigureAwait(false);
 
-            await using var command = new SqlCommand(_migrationScript.GetSchemasScript, connection);
+            await using var command = new SqlCommand(_migrationScript.GetSchemasScript, connection.Connection);
             await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
 
             while (await reader.ReadAsync().ConfigureAwait(false))
@@ -75,10 +76,10 @@ namespace TestParse.Services
         {
             var indexes = new List<IndexInfo>();
 
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync().ConfigureAwait(false);
+            await using var connection = new SqlConnectionManager(connectionString);
+            await connection.OpenConnectionAsync().ConfigureAwait(false);
 
-            await using var command = new SqlCommand(_migrationScript.GetIndexesScript, connection);
+            await using var command = new SqlCommand(_migrationScript.GetIndexesScript, connection.Connection);
             await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
 
             while (await reader.ReadAsync().ConfigureAwait(false))
@@ -97,10 +98,10 @@ namespace TestParse.Services
         {
             var foreignKeys = new List<ForeignKeyInfo>();
 
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync().ConfigureAwait(false);
+            await using var connection = new SqlConnectionManager(connectionString);
+            await connection.OpenConnectionAsync().ConfigureAwait(false);
 
-            await using var command = new SqlCommand(_migrationScript.GetForeignKeysScript, connection);
+            await using var command = new SqlCommand(_migrationScript.GetForeignKeysScript, connection.Connection);
             await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
 
             while (await reader.ReadAsync().ConfigureAwait(false))

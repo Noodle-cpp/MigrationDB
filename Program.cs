@@ -32,7 +32,7 @@ internal class Program
         SetupConfiguration();
         var services = SetupDependencyInjection();
 
-        var databaseMigrationService = services.GetRequiredService<IDatabaseMigrationService>();
+        var databaseMigrationService = services.GetRequiredService<IDatabaseMigrationCoordinator>();
         var dataMigrationService = services.GetRequiredService<IDataMigrationService>();
 
         try

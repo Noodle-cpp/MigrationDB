@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TestParse.Helpers;
 using TestParse.Models;
 using TestParse.Models.InfoModels;
 using TestParse.Queries;
@@ -21,14 +22,11 @@ namespace TestParse.Services
             _migrationScript = migrationScript;
         }
 
-        public async Task GenerateCreateTableScriptsAsync(IEnumerable<TableDifference> missingTables, string sourceConnectionString)
+        public async Task GenerateCreateTableScriptsAsync(IEnumerable<TableDifference> missingTables, SqlConnectionManager sourceConn)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
             foreach (var table in missingTables)
             {
-                using var command = new SqlCommand(_migrationScript.CreateTableScript, sourceConn);
+                using var command = new SqlCommand(_migrationScript.CreateTableScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@TableName", table.TableName);
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
                     throw new ArgumentException(nameof(_migrationScript.CreateTableScript));
@@ -36,14 +34,11 @@ namespace TestParse.Services
             }
         }
 
-        public async Task GenerateMissingColumnScriptsAsync(IEnumerable<ColumnDifference> missingColumns, string sourceConnectionString)
+        public async Task GenerateMissingColumnScriptsAsync(IEnumerable<ColumnDifference> missingColumns, SqlConnectionManager sourceConn)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
             foreach (var column in missingColumns)
             {
-                using var command = new SqlCommand(_migrationScript.CreateAttributeScript, sourceConn);
+                using var command = new SqlCommand(_migrationScript.CreateAttributeScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@TableName", column.TableName);
                 command.Parameters.AddWithValue("@ColumnName", column.ColumnName);
 
@@ -53,14 +48,11 @@ namespace TestParse.Services
             }
         }
 
-        public async Task GenerateMissingSchemaScriptsAsync(IEnumerable<SchemaInfo> missingSchemas, string sourceConnectionString)
+        public async Task GenerateMissingSchemaScriptsAsync(IEnumerable<SchemaInfo> missingSchemas, SqlConnectionManager sourceConn)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
             foreach (var schema in missingSchemas)
             {
-                using var command = new SqlCommand(_migrationScript.CreateSchemaScript, sourceConn);
+                using var command = new SqlCommand(_migrationScript.CreateSchemaScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@SchemaName", schema.SchemaName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
@@ -70,14 +62,11 @@ namespace TestParse.Services
             }
         }
 
-        public async Task GenerateDifferentColumnScriptsAsync(IEnumerable<ColumnDifference> differentColumns, string sourceConnectionString)
+        public async Task GenerateDifferentColumnScriptsAsync(IEnumerable<ColumnDifference> differentColumns, SqlConnectionManager sourceConn)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
             foreach (var column in differentColumns)
             {
-                using var command = new SqlCommand(_migrationScript.AlterAttributeScript, sourceConn);
+                using var command = new SqlCommand(_migrationScript.AlterAttributeScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@TableName", column.TableName);
                 command.Parameters.AddWithValue("@ColumnName", column.ColumnName);
 
@@ -87,14 +76,11 @@ namespace TestParse.Services
             }
         }
 
-        public async Task GenerateCreateForeignKeyScriptsAsync(IEnumerable<ForeignKeyInfo> foreignKeys, string sourceConnectionString)
+        public async Task GenerateCreateForeignKeyScriptsAsync(IEnumerable<ForeignKeyInfo> foreignKeys, SqlConnectionManager sourceConn)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
             foreach (var fk in foreignKeys)
             {
-                using var command = new SqlCommand(_migrationScript.CreateForeignKeyScript, sourceConn);
+                using var command = new SqlCommand(_migrationScript.CreateForeignKeyScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@ForeignKeyName", fk.ForeignKeyName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
@@ -104,14 +90,11 @@ namespace TestParse.Services
             }
         }
 
-        public async Task GenerateCreateIndexScriptAsync(IEnumerable<IndexInfo> indexes, string sourceConnectionString)
+        public async Task GenerateCreateIndexScriptAsync(IEnumerable<IndexInfo> indexes, SqlConnectionManager sourceConn)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
             foreach (var index in indexes)
             {
-                using var command = new SqlCommand(_migrationScript.CreateIndexScript, sourceConn);
+                using var command = new SqlCommand(_migrationScript.CreateIndexScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@IndexName", index.IndexName);
                 command.Parameters.AddWithValue("@TableName", index.TableName);
 
@@ -122,14 +105,11 @@ namespace TestParse.Services
             }
         }
 
-        public async Task<IEnumerable<string>> GenerateDropAllIndexesScriptAsync(string targetConnectionString)
+        public async Task<IEnumerable<string>> GenerateDropAllIndexesScriptAsync(SqlConnectionManager targetConn)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
-            await targetConn.OpenAsync();
-
             var dropScripts = new List<string>();
 
-            using var command = new SqlCommand(_migrationScript.DropAllIndexesScript, targetConn);
+            using var command = new SqlCommand(_migrationScript.DropAllIndexesScript, targetConn.Connection, targetConn.Transaction);
             using var reader = await command.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
@@ -138,14 +118,11 @@ namespace TestParse.Services
             return dropScripts;
         }
 
-        public async Task<IEnumerable<string>> GenerateDropAllForeignKeysScriptAsync(string targetConnectionString)
+        public async Task<IEnumerable<string>> GenerateDropAllForeignKeysScriptAsync(SqlConnectionManager targetConn)
         {
             var dropScripts = new List<string>();
 
-            await using var targetConn = new SqlConnection(targetConnectionString);
-            await targetConn.OpenAsync();
-
-            using var command = new SqlCommand(_migrationScript.DropAllForeignKeysScript, targetConn);
+            using var command = new SqlCommand(_migrationScript.DropAllForeignKeysScript, targetConn.Connection, targetConn.Transaction);
             using var reader = await command.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
@@ -154,36 +131,27 @@ namespace TestParse.Services
             return dropScripts;
         }
 
-        public async Task<string> GenerateIdentityCountScriptAsync(string targetConnectionString, string tableName)
+        public async Task<string> GenerateIdentityCountScriptAsync(SqlConnectionManager targetConn, string tableName)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
-            await targetConn.OpenAsync();
-
-            using var command = new SqlCommand(_migrationScript.IdentityCountScript, targetConn);
+            using var command = new SqlCommand(_migrationScript.IdentityCountScript, targetConn.Connection, targetConn.Transaction);
             command.Parameters.AddWithValue("@TableName", tableName);
             var script = (await command.ExecuteScalarAsync())?.ToString();
 
             return script;
         }
 
-        public async Task<string> GenerateClearDataScriptAsync(string targetConnectionString, string tableName)
+        public async Task<string> GenerateClearDataScriptAsync(SqlConnectionManager targetConn, string tableName)
         {
-            await using var targetConn = new SqlConnection(targetConnectionString);
-            await targetConn.OpenAsync();
-
-            using var command = new SqlCommand(_migrationScript.ClearDataScript, targetConn);
+            using var command = new SqlCommand(_migrationScript.ClearDataScript, targetConn.Connection, targetConn.Transaction);
             command.Parameters.AddWithValue("@TableName", tableName);
             var script = (await command.ExecuteScalarAsync())?.ToString();
 
             return script;
         }
 
-        public async Task<SelectDataResult> GenerateSelectDataScriptAsync(string sourceConnectionString, string tableName)
+        public async Task<SelectDataResult> GenerateSelectDataScriptAsync(SqlConnectionManager sourceConn, string tableName)
         {
-            await using var sourceConn = new SqlConnection(sourceConnectionString);
-            await sourceConn.OpenAsync();
-
-            using var command = new SqlCommand(_migrationScript.SelectDataScript, sourceConn);
+            using var command = new SqlCommand(_migrationScript.SelectDataScript, sourceConn.Connection);
             command.Parameters.AddWithValue("@TableName", tableName);
             await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
             await reader.ReadAsync().ConfigureAwait(false);

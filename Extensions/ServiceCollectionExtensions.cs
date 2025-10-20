@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using TestParse.Helpers;
+using TestParse.Helpers.Interfaces;
 using TestParse.Models;
 using TestParse.Queries;
 using TestParse.Scripts.Abstractions;
@@ -13,9 +15,11 @@ namespace TestParse.Extensions
         string sourceConnectionString, string targetConnectionString, DatabaseType databaseType)
         {
             services.AddScoped<IDatabaseSchemaReader, DatabaseSchemaReader>();
-            services.AddScoped<IDatabaseComparisonService, DatabaseComparisonService>();
             services.AddScoped<IScriptGenerationService, ScriptGenerationService>();
             services.AddScoped<IDataMigrationService, DataMigrationService>();
+            services.AddScoped<IScriptExecutor, ScriptExecutor>();
+
+            services.AddScoped<IDatabaseComparator, DatabaseComparator>();
 
             services.AddScoped<MigrationMSSQLScripts>();
 
@@ -29,14 +33,15 @@ namespace TestParse.Extensions
                 };
             });
 
-            services.AddScoped<IDatabaseMigrationService>(provider =>
-                new DatabaseMigrationService(
+            services.AddScoped<IDatabaseMigrationCoordinator>(provider =>
+                new DatabaseMigrationCoordinator(
                     sourceConnectionString,
                     targetConnectionString,
                     provider.GetRequiredService<IDatabaseSchemaReader>(),
-                    provider.GetRequiredService<IDatabaseComparisonService>(),
                     provider.GetRequiredService<IScriptGenerationService>(),
-                    provider.GetRequiredService<IDataMigrationService>()));
+                    provider.GetRequiredService<IDataMigrationService>(),
+                    provider.GetRequiredService<IScriptExecutor>(),
+                    provider.GetRequiredService<IDatabaseComparator>()));
 
             return services;
         }

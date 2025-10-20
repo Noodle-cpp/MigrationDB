@@ -1,27 +1,70 @@
-﻿using TestParse.Models;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using TestParse.Helpers;
+using TestParse.Models;
 using TestParse.Models.InfoModels;
 using TestParse.Services.Interfaces;
 
 namespace TestParse.Services
 {
-    public class DatabaseComparisonService : IDatabaseComparisonService
+    public class DatabaseComparator : IDatabaseComparator
     {
-        public List<TableDifference> FindMissingTables(Dictionary<string, List<ColumnInfo>> sourceTables, Dictionary<string, List<ColumnInfo>> targetTables)
+        private readonly IDatabaseSchemaReader _schemaService;
+
+        public DatabaseComparator(IDatabaseSchemaReader schemaService)
+        {
+            _schemaService = schemaService;
+        }
+
+        public async Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString, string targetConnectionString)
+        {
+            var result = new DatabaseComparisonResult();
+
+            await using var sourceConn = new SqlConnectionManager(sourceConnectionString);
+            await using var targetConn = new SqlConnectionManager(targetConnectionString);
+
+            await sourceConn.OpenConnectionAsync().ConfigureAwait(false);
+            await targetConn.OpenConnectionAsync().ConfigureAwait(false);
+
+            var sourceSchemas = await _schemaService.GetSchemasAsync(sourceConnectionString).ConfigureAwait(false);
+            var targetSchemas = await _schemaService.GetSchemasAsync(targetConnectionString).ConfigureAwait(false);
+            result.MissingSchemas = FindMissingSchemas(sourceSchemas, targetSchemas);
+
+            var sourceTables = await _schemaService.GetDatabaseTablesAsync(sourceConnectionString).ConfigureAwait(false);
+            var targetTables = await _schemaService.GetDatabaseTablesAsync(targetConnectionString).ConfigureAwait(false);
+            result.MissingTables = FindMissingTables(sourceTables, targetTables);
+
+            result.MissingColumns = FindMissingColumns(sourceTables, targetTables);
+            result.DifferentColumns = FindDifferentColumns(sourceTables, targetTables);
+
+            var sourceIndexes = await _schemaService.GetIndexesAsync(sourceTables, sourceConnectionString).ConfigureAwait(false);
+            var targetIndexes = await _schemaService.GetIndexesAsync(targetTables, targetConnectionString).ConfigureAwait(false);
+            result.MissingIndexes = FindMissingIndexes(sourceIndexes, targetIndexes);
+
+            result.MissingForeignKeys = await _schemaService.GetForeignKeysAsync(sourceConnectionString).ConfigureAwait(false);
+
+            return result;
+        }
+
+        private List<TableDifference> FindMissingTables(Dictionary<string, List<ColumnInfo>> sourceTables, Dictionary<string, List<ColumnInfo>> targetTables)
         {
             return sourceTables.Keys
                 .Where(tableName => !targetTables.ContainsKey(tableName))
                 .Select(tableName => new TableDifference { TableName = tableName })
                 .ToList();
         }
-        
-        public List<SchemaInfo> FindMissingSchemas(List<SchemaInfo> sourceSchemaNames, List<SchemaInfo> targetSchemaNames)
+
+        private List<SchemaInfo> FindMissingSchemas(List<SchemaInfo> sourceSchemaNames, List<SchemaInfo> targetSchemaNames)
         {
             return sourceSchemaNames
                 .Where(schemaName => !targetSchemaNames.Select(targetSchema => targetSchema.SchemaName).Contains(schemaName.SchemaName))
                 .ToList();
         }
-        
-        public List<ColumnDifference> FindMissingColumns(Dictionary<string, List<ColumnInfo>> sourceTables, Dictionary<string, List<ColumnInfo>> targetTables)
+
+        private List<ColumnDifference> FindMissingColumns(Dictionary<string, List<ColumnInfo>> sourceTables, Dictionary<string, List<ColumnInfo>> targetTables)
         {
             var missingColumns = new List<ColumnDifference>();
 
@@ -39,7 +82,7 @@ namespace TestParse.Services
                     var targetColumn = targetColumns.FirstOrDefault(c => c.ColumnName.Equals(sourceColumn.ColumnName, StringComparison.OrdinalIgnoreCase));
 
                     if (targetColumn is not null) continue;
-                
+
                     missingColumns.Add(new ColumnDifference
                     {
                         TableName = tableName,
@@ -53,7 +96,7 @@ namespace TestParse.Services
             return missingColumns;
         }
 
-        public List<ColumnDifference> FindDifferentColumns(Dictionary<string, List<ColumnInfo>> sourceTables, Dictionary<string, List<ColumnInfo>> targetTables)
+        private List<ColumnDifference> FindDifferentColumns(Dictionary<string, List<ColumnInfo>> sourceTables, Dictionary<string, List<ColumnInfo>> targetTables)
         {
             var differentColumns = new List<ColumnDifference>();
 
@@ -87,7 +130,7 @@ namespace TestParse.Services
             return differentColumns;
         }
 
-        public List<IndexInfo> FindMissingIndexes(List<IndexInfo> source, List<IndexInfo> target)
+        private List<IndexInfo> FindMissingIndexes(List<IndexInfo> source, List<IndexInfo> target)
         {
             return source.Where(sourceIndex =>
                 !target.Any(targetIndex =>
