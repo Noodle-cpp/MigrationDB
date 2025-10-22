@@ -92,10 +92,10 @@ namespace TestParse.Services
             if (_clearDataBeforeInsert)
                 await _dataMigrationService.ClearAllTablesDataAsync(targetConn, [.. targetTables.Keys]);
 
-            if (_includeDatabase)
+            if(_includeDatabase)
                 await ExecuteSchemaScripts(comparisonResult).ConfigureAwait(false);
 
-            if (_includeData)
+            if(_includeData)
                 await MigrateData(sourceTables).ConfigureAwait(false);
 
             await CreateIndexesAndConstraints(comparisonResult).ConfigureAwait(false);

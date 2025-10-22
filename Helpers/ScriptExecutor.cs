@@ -44,7 +44,6 @@ namespace TestParse.Helpers
             }
             catch (Exception)
             {
-                _logger.LogDebug(script);
                 if (connection.Transaction is not null)
                     connection.Transaction.Rollback();
                 throw;

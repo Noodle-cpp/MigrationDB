@@ -13,9 +13,7 @@ namespace TestParse.Services
             _schemaReader = schemaReader;
         }
 
-        public async Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString,
-                                                                            string targetConnectionString,
-                                                                            bool clearDataBeforeInsert)
+        public async Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString, string targetConnectionString, bool clearDataBeforeInsert)
         {
             var result = new DatabaseComparisonResult();
 
@@ -52,16 +50,6 @@ namespace TestParse.Services
         {
             return sourceSchemaNames
                 .Where(schemaName => !targetSchemaNames.Select(targetSchema => targetSchema.SchemaName).Contains(schemaName.SchemaName))
-                .ToList();
-        }
-
-        private List<ForeignKeyInfo> FindMissingForeignKeys(List<ForeignKeyInfo> sourceForeignKeys, List<ForeignKeyInfo> targetForeignKeys)
-        {
-            return sourceForeignKeys.Where(sourceFk =>
-                !targetForeignKeys.Any(targetFk => targetFk.TableName == sourceFk.TableName &&
-                                        targetFk.ReferencedTableName == sourceFk.ReferencedTableName &&
-                                        targetFk.ColumnName == sourceFk.ColumnName &&
-                                        targetFk.ReferencedColumnName == sourceFk.ReferencedColumnName))
                 .ToList();
         }
 
@@ -129,15 +117,6 @@ namespace TestParse.Services
             }
 
             return differentColumns;
-        }
-
-        private List<IndexInfo> FindMissingIndexes(List<IndexInfo> source, List<IndexInfo> target)
-        {
-            return source.Where(sourceIndex =>
-                !target.Any(targetIndex =>
-                    targetIndex.TableName == sourceIndex.TableName &&
-                    targetIndex.IndexName == sourceIndex.IndexName))
-                .ToList();
         }
 
         private bool IsColumnsEqual(ColumnInfo source, ColumnInfo target)
