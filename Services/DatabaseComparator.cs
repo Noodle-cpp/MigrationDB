@@ -13,7 +13,9 @@ namespace TestParse.Services
             _schemaReader = schemaReader;
         }
 
-        public async Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString, string targetConnectionString)
+        public async Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString,
+                                                                            string targetConnectionString,
+                                                                            bool clearDataBeforeInsert)
         {
             var result = new DatabaseComparisonResult();
 
@@ -28,10 +30,7 @@ namespace TestParse.Services
             result.MissingColumns = FindMissingColumns(sourceTables, targetTables);
             result.DifferentColumns = FindDifferentColumns(sourceTables, targetTables);
 
-            var sourceIndexes = await _schemaReader.GetIndexesAsync(sourceTables, sourceConnectionString).ConfigureAwait(false);
-            var targetIndexes = await _schemaReader.GetIndexesAsync(targetTables, targetConnectionString).ConfigureAwait(false);
-            result.MissingIndexes = FindMissingIndexes(sourceIndexes, targetIndexes);
-
+            result.MissingIndexes = await _schemaReader.GetIndexesAsync(sourceTables, sourceConnectionString).ConfigureAwait(false);
             result.MissingForeignKeys = await _schemaReader.GetForeignKeysAsync(sourceConnectionString).ConfigureAwait(false);
 
             return result;
@@ -41,7 +40,11 @@ namespace TestParse.Services
         {
             return sourceTables.Keys
                 .Where(tableName => !targetTables.ContainsKey(tableName))
-                .Select(tableName => new TableDifference { TableName = tableName })
+                .Select(tableName => new TableDifference
+                {
+                    TableName = tableName.Split('.').Last(),
+                    SchemaName = tableName.Split('.').First().Replace("[", "").Replace("]", "")
+                })
                 .ToList();
         }
 
@@ -49,6 +52,16 @@ namespace TestParse.Services
         {
             return sourceSchemaNames
                 .Where(schemaName => !targetSchemaNames.Select(targetSchema => targetSchema.SchemaName).Contains(schemaName.SchemaName))
+                .ToList();
+        }
+
+        private List<ForeignKeyInfo> FindMissingForeignKeys(List<ForeignKeyInfo> sourceForeignKeys, List<ForeignKeyInfo> targetForeignKeys)
+        {
+            return sourceForeignKeys.Where(sourceFk =>
+                !targetForeignKeys.Any(targetFk => targetFk.TableName == sourceFk.TableName &&
+                                        targetFk.ReferencedTableName == sourceFk.ReferencedTableName &&
+                                        targetFk.ColumnName == sourceFk.ColumnName &&
+                                        targetFk.ReferencedColumnName == sourceFk.ReferencedColumnName))
                 .ToList();
         }
 
@@ -140,23 +153,15 @@ namespace TestParse.Services
         {
             var dataType = column.DataType.ToUpper();
 
-            switch (dataType)
+            return dataType switch
             {
-                case "VARCHAR":
-                case "NVARCHAR":
-                case "CHAR":
-                case "NCHAR":
-                    return column.MaxLength == -1 ?
-                        $"{dataType}(MAX)" :
-                        $"{dataType}({column.MaxLength})";
-
-                case "DECIMAL":
-                case "NUMERIC":
-                    return $"{dataType}({column.NumericPrecision},{column.NumericScale})";
-
-                default:
-                    return dataType;
-            }
+                "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR" or "VARBINARY" =>
+                    column.MaxLength == -1 ?
+                    $"{dataType}(MAX)" : column.MaxLength == 128 ? $"SYSNAME" :
+                    $"{dataType}({column.MaxLength})",
+                "DECIMAL" or "NUMERIC" => $"{dataType}({column.NumericPrecision},{column.NumericScale})",
+                _ => dataType,
+            };
         }
     }
 }

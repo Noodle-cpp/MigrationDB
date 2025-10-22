@@ -8,6 +8,7 @@ namespace TestParse.Models.InfoModels
 {
     public class IndexInfo
     {
+        public string SchemaName { get; set; }
         public string TableName { get; set; }
         public string IndexName { get; set; }
         public string CreateIndexScript { get; set; }

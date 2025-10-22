@@ -9,21 +9,21 @@ namespace TestParse.Queries
 {
     public class MigrationMSSQLScripts : BaseMigrationScript
     {
-        public override string CreateAttributeScript => $@"
+        public override string GenerateCreateAttributeScript => $@"
             SELECT 
                 'ALTER TABLE [' + TABLE_SCHEMA + '].[' + TABLE_NAME + '] ADD [' + COLUMN_NAME + '] ' +
                 {ColumnDataType}
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName";
 
-        public override string AlterAttributeScript => $@"
+        public override string GenerateAlterAttributeScript => $@"
             SELECT 
                 'ALTER TABLE [' + TABLE_SCHEMA + '].[' + TABLE_NAME + '] ALTER COLUMN [' + COLUMN_NAME + '] ' +
                 {ColumnDataType}
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName";
 
-        public override string CreateTableScript => $@"
+        public override string GenerateCreateTableScript => $@"
             SELECT 
                 'CREATE TABLE [' + TABLE_SCHEMA + '].[' + TABLE_NAME + '] (' +
                 STUFF((
@@ -36,33 +36,37 @@ namespace TestParse.Queries
                 ).value('.', 'NVARCHAR(MAX)'), 1, 1, '') +
                 ');' as CreateScript
             FROM INFORMATION_SCHEMA.COLUMNS c
-            WHERE TABLE_NAME = @TableName
+            WHERE TABLE_NAME = @TableName AND TABLE_SCHEMA = @SchemaName
             GROUP BY TABLE_SCHEMA, TABLE_NAME";
 
         public override string GetTableInfoScript => @"
             SELECT 
-                    TABLE_NAME,
-                    COLUMN_NAME,
-                    DATA_TYPE,
-                    IS_NULLABLE,
-                    CHARACTER_MAXIMUM_LENGTH,
-                    NUMERIC_PRECISION,
-                    NUMERIC_SCALE
-                FROM INFORMATION_SCHEMA.COLUMNS
-                ORDER BY TABLE_NAME, ORDINAL_POSITION";
+                TABLE_SCHEMA,
+                TABLE_NAME,
+                COLUMN_NAME,
+                DATA_TYPE,
+                IS_NULLABLE,
+                CHARACTER_MAXIMUM_LENGTH,
+                NUMERIC_PRECISION,
+                NUMERIC_SCALE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION";
 
         /// <summary>
         /// 2 блок STUFF - INCLUDED столбцы
         /// </summary>
         public override string GetIndexesScript => $@"
            SELECT 
+                s.name AS SchemaName,
                 t.name AS TableName,
                 i.name AS IndexName
             FROM sys.indexes i
             INNER JOIN sys.tables t ON i.object_id = t.object_id
-            WHERE i.name IS NOT NULL ";
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE i.name IS NOT NULL
+            ORDER BY s.name, t.name, i.name";
 
-        public override string CreateIndexScript => $@"
+        public override string GenerateCreateIndexScript => $@"
             SELECT 
                 ('CREATE ' +
                 CASE WHEN i.is_unique = 1 THEN 'UNIQUE ' ELSE '' END +
@@ -90,7 +94,8 @@ namespace TestParse.Queries
             FROM sys.indexes i
             JOIN sys.tables t ON i.object_id = t.object_id
             WHERE i.name = @IndexName
-            AND t.name = @TableName";
+            AND t.name = @TableName
+            AND SCHEMA_NAME(t.schema_id) = @SchemaName";
 
         public override string GetForeignKeysScript => $@"
             SELECT 
@@ -102,7 +107,7 @@ namespace TestParse.Queries
             FROM sys.foreign_keys fk
             ORDER BY TableName, ForeignKeyName";
 
-        public override string CreateForeignKeyScript => $@"
+        public override string GenerateCreateForeignKeyScript => $@"
             SELECT 
                 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] ' +
                 'ADD CONSTRAINT [' + fk.name + '] ' +
@@ -123,7 +128,7 @@ namespace TestParse.Queries
                                 'db_denydatareader', 'db_denydatawriter')
             ORDER BY s.name";
 
-        public override string CreateSchemaScript => @"
+        public override string GenerateCreateSchemaScript => @"
             SELECT 'CREATE SCHEMA [' + name + ']' + 
                    CASE WHEN principal_id > 1 THEN 
                        ' AUTHORIZATION [' + USER_NAME(principal_id) + ']' 
@@ -131,19 +136,23 @@ namespace TestParse.Queries
             FROM sys.schemas 
             WHERE name = @SchemaName";
 
-        public override string DropAllIndexesScript => @"
-            SELECT 
-                'DROP INDEX [' + i.name + '] ON [' + SCHEMA_NAME(t.schema_id) + '].[' + t.name + ']' AS DropIndexScript
+        public override string GenerateDropAllIndexesScript => @"
+           SELECT 
+                CASE 
+                    WHEN i.is_primary_key = 1 THEN 
+                        'ALTER TABLE [' + SCHEMA_NAME(t.schema_id) + '].[' + t.name + '] DROP CONSTRAINT [' + i.name + ']'
+                    ELSE 
+                        'DROP INDEX [' + i.name + '] ON [' + SCHEMA_NAME(t.schema_id) + '].[' + t.name + ']'
+                END AS DropIndexScript
             FROM sys.indexes i
             JOIN sys.tables t ON i.object_id = t.object_id
-            WHERE i.index_id > 1  
-            AND i.type IN (2, 6)  
-            AND i.is_primary_key = 0
-            AND i.is_unique_constraint = 0
+            WHERE i.index_id > 0  
+            AND i.type IN (1, 2, 6)  -- CLUSTERED, NONCLUSTERED, CLUSTERED COLUMNSTORE
+            AND i.is_unique_constraint = 0  -- Уникальные ограничения обрабатываются отдельно
             AND t.is_ms_shipped = 0";
 
 
-        public override string DropAllForeignKeysScript => @"
+        public override string GenerateDropAllForeignKeysScript => @"
             SELECT ' ALTER TABLE ' + QUOTENAME(OBJECT_SCHEMA_NAME(parent_object_id)) + '.' + QUOTENAME(OBJECT_NAME(parent_object_id)) + ' DROP CONSTRAINT ' + QUOTENAME(name) + ';' AS DropForeignKeyScript
             FROM sys.objects
             WHERE type_desc LIKE '%CONSTRAINT%';";
@@ -164,21 +173,21 @@ namespace TestParse.Queries
 
         public override string EnableIdentityScript => @"SET IDENTITY_INSERT @TableName ON;";
 
-        public override string ClearDataScript => @"
+        public override string GenerateClearDataScript => @"
         SELECT
-            'DELETE FROM [' + TABLE_SCHEMA + '].' + TABLE_NAME + '' AS ClearData
+            'TRUNCATE TABLE [' + TABLE_SCHEMA + '].' + TABLE_NAME + '' AS ClearData
         FROM INFORMATION_SCHEMA.COLUMNS c
         WHERE TABLE_NAME = @TableName
         GROUP BY TABLE_SCHEMA, TABLE_NAME;";
 
-        public override string SelectDataScript => @"SELECT
+        public override string GenerateSelectDataScript => @"SELECT
             TABLE_SCHEMA AS SchemaName,
             'SELECT * FROM [' + TABLE_SCHEMA + '].' + TABLE_NAME + '' AS SelectData
         FROM INFORMATION_SCHEMA.COLUMNS c
         WHERE TABLE_NAME = @TableName
         GROUP BY TABLE_SCHEMA, TABLE_NAME";
 
-        public override string IdentityCountScript => @"
+        public override string GenerateIdentityCountScript => @"
         SELECT
         'SELECT COUNT(*) 
             FROM sys.columns c
@@ -190,15 +199,27 @@ namespace TestParse.Queries
         FROM INFORMATION_SCHEMA.COLUMNS c
         GROUP BY TABLE_SCHEMA, TABLE_NAME";
 
+        public override string BatchSelectScript => @"
+        SELECT * FROM (
+            SELECT *, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) as RowNum
+            FROM @TableName
+        ) t
+        WHERE RowNum BETWEEN @Start AND @End";
+
+        public override string GetTableRowCountScript => @"SELECT COUNT_BIG(*) FROM @TableName";
+
         /// <summary>
         /// В 1 блоке CASE текстовый, плавающая точка, остальные
         /// В 2 блоке CASE определяется NULLABLE
         /// В 3 блоке - остальные
         /// </summary>
         private const string ColumnDataType = @"
-                DATA_TYPE +
                 CASE 
-                    WHEN DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar') THEN
+                    WHEN DATA_TYPE = 'sysname' THEN 'SYSNAME'
+                    ELSE DATA_TYPE
+                END +
+                CASE 
+                    WHEN DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar', 'varbinary') THEN
                         CASE 
                             WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN '(MAX)'
                             ELSE '(' + CAST(CHARACTER_MAXIMUM_LENGTH AS VARCHAR) + ')'

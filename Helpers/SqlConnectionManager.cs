@@ -8,7 +8,7 @@ using TestParse.Helpers.Interfaces;
 
 namespace TestParse.Helpers
 {
-    public class SqlConnectionManager : ISqlConnectionManager
+    public class SqlConnectionManager : ISqlConnectionManager, IAsyncDisposable
     {
         private readonly string _connectionString;
 
@@ -37,13 +37,13 @@ namespace TestParse.Helpers
 
         public async Task CommitAsync()
         {
-            if(Transaction is not null)
+            if (Transaction is not null)
                 await Transaction.CommitAsync().ConfigureAwait(false);
         }
 
         public async Task RollbackAsync()
         {
-            if(Transaction is not null)
+            if (Transaction is not null)
                 await Transaction.RollbackAsync().ConfigureAwait(false);
         }
 

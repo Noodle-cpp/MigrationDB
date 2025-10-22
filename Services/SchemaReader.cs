@@ -33,9 +33,11 @@ namespace TestParse.Services
 
             while (await reader.ReadAsync().ConfigureAwait(false))
             {
-                var tableName = reader["TABLE_NAME"].ToString();
+                var tableName = $"[{reader["TABLE_SCHEMA"]}].{reader["TABLE_NAME"]}";
+
                 var columnInfo = new ColumnInfo
                 {
+                    SchemaName = reader["TABLE_SCHEMA"].ToString(),
                     ColumnName = reader["COLUMN_NAME"].ToString(),
                     DataType = reader["DATA_TYPE"].ToString(),
                     IsNullable = reader["IS_NULLABLE"].ToString() == "YES",
@@ -86,6 +88,7 @@ namespace TestParse.Services
             {
                 indexes.Add(new IndexInfo
                 {
+                    SchemaName = reader["SchemaName"].ToString(),
                     TableName = reader["TableName"].ToString(),
                     IndexName = reader["IndexName"].ToString(),
                 });

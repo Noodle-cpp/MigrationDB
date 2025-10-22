@@ -8,6 +8,7 @@ namespace TestParse.Models
 {
     public class TableDifference
     {
+        public string SchemaName { get; set; }
         public string TableName { get; set; }
         public string CreateTableScript { get; set; }
     }

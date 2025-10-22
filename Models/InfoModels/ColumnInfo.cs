@@ -8,6 +8,7 @@ namespace TestParse.Models.InfoModels
 {
     public class ColumnInfo
     {
+        public string SchemaName { get; set; }
         public string ColumnName { get; set; }
         public string DataType { get; set; }
         public bool IsNullable { get; set; }

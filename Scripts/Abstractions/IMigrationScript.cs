@@ -9,84 +9,110 @@ namespace TestParse.Scripts.Abstractions
     public interface IMigrationScript
     {
         /// <summary>
-        /// Создает атрибут таблицы, если его не существует
+        /// Генерирует запрос на создание атрибута таблицы, если его не существует
         /// </summary>
-        string CreateAttributeScript { get; }
+        string GenerateCreateAttributeScript { get; }
+
         /// <summary>
-        /// Изменяет атрибут, если имеются отличия с исходным
+        /// Генерирует запрос на изменение атрибута, если имеются отличия с исходным
         /// </summary>
-        string AlterAttributeScript { get; }
+        string GenerateAlterAttributeScript { get; }
+
         /// <summary>
-        /// Создает таблицу, если ее не существует
+        /// Генерирует запрос на создание таблицы, если ее не существует
         /// </summary>
-        string CreateTableScript { get; }
+        string GenerateCreateTableScript { get; }
+
         /// <summary>
         /// Получает информацию о таблице
         /// </summary>
         string GetTableInfoScript { get; }
+
         /// <summary>
         /// Получает информацию об индексах
         /// </summary>
         string GetIndexesScript { get; }
+
         /// <summary>
-        /// Создает индекс
+        /// Генерирует запрос на создание индекса
         /// </summary>
-        string CreateIndexScript { get; }
+        string GenerateCreateIndexScript { get; }
+
         /// <summary>
         /// Получает информацию о внешних ключах
         /// </summary>
         string GetForeignKeysScript { get; }
+
         /// <summary>
-        /// Создает внешний ключ
+        /// Генерирует запрос на создание внешнего ключа
         /// </summary>
-        string CreateForeignKeyScript { get; }
+        string GenerateCreateForeignKeyScript { get; }
+
         /// <summary>
         /// Получает схемы 
         /// </summary>
         string GetSchemasScript { get; }
+
         /// <summary>
-        /// Создает схему
+        /// Генерирует запрос на создание схемы
         /// </summary>
-        string CreateSchemaScript { get; }
+        string GenerateCreateSchemaScript { get; }
+
         /// <summary>
-        /// Удаляет все некластеризованные индексы
+        /// Генерирует запрос на удаление всех некластеризованных индексов
         /// </summary>
-        string DropAllIndexesScript { get; }
+        string GenerateDropAllIndexesScript { get; }
+
         /// <summary>
-        /// Очищение CONSTRAINT
+        /// Генерирует запрос на очищение CONSTRAINT
         /// </summary>
-        string DropAllForeignKeysScript { get; }
+        string GenerateDropAllForeignKeysScript { get; }
+
         /// <summary>
         /// Отключает ВСЕ ограничений (CONSTRAINTS) во ВСЕХ таблицах базы данных
         /// </summary>
         string DisableConstraintsScript { get; }
+
         /// <summary>
         /// Включает ВСЕ ограничений (CONSTRAINTS) во ВСЕХ таблицах базы данных
         /// </summary>
         string EnableConstraintsScript { get; }
+
         /// <summary>
         /// Отключает IDENTITY_INSERT для указанной таблицы
         /// Позволяет запретить явную вставку значений в identity-столбец
         /// </summary>
         string DisableIdentityScript { get; }
+
         /// <summary>
         /// Включает IDENTITY_INSERT для указанной таблицы
         /// Позволяет выполнять явную вставку значений в identity-столбец
         /// </summary>
         string EnableIdentityScript { get; }
+
         /// <summary>
-        /// Очищает данные в БД
+        /// Генерирует запрос на очищение данных в БД
         /// </summary>
-        string ClearDataScript { get; }
+        string GenerateClearDataScript { get; }
+
         /// <summary>
-        /// Получает данные из БД
         /// Генерирует запрос на выборку всех столбцов с указанием схемы и имени таблицы
         /// </summary>
-        string SelectDataScript { get; }
+        string GenerateSelectDataScript { get; }
+
         /// <summary>
-        /// Проверяет наличие identity-столбцов в таблице
         /// Генерирует запрос, который возвращает количество identity-столбцов (0 или 1)
         /// </summary>
-        string IdentityCountScript { get; }
+        string GenerateIdentityCountScript { get; }
+
+        /// <summary>
+        /// Получает кол-во строк в таблице
+        /// </summary>
+        public abstract string GetTableRowCountScript { get; }
+
+        /// <summary>
+        /// Получает данные из таблицы пакетами
+        /// </summary>
+        public abstract string BatchSelectScript { get; }
     }
 }

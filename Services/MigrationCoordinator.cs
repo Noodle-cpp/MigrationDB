@@ -24,13 +24,20 @@ namespace TestParse.Services
         private readonly SqlConnectionManager sourceConn;
         private readonly SqlConnectionManager targetConn;
 
-    public MigrationCoordinator(string sourceConnectionString,
-                                string targetConnectionString,
-                                ISchemaReader schemaService,
-                                IScriptGenerator scriptGenerationService,
-                                IDataMigrationService dataMigrationService,
-                                IScriptExecutor scriptExecutor,
-                                IDatabaseComparator databaseComparator)
+        private readonly bool _clearDataBeforeInsert;
+        private readonly bool _includeDatabase;
+        private readonly bool _includeData;
+
+        public MigrationCoordinator(string sourceConnectionString,
+                                    string targetConnectionString,
+                                    bool clearDataBeforeInsert,
+                                    bool includeDatabase,
+                                    bool includeData,
+                                    ISchemaReader schemaService,
+                                    IScriptGenerator scriptGenerationService,
+                                    IDataMigrationService dataMigrationService,
+                                    IScriptExecutor scriptExecutor,
+                                    IDatabaseComparator databaseComparator)
         {
             _schemaReader = schemaService;
             _scriptGenerationService = scriptGenerationService;
@@ -43,11 +50,15 @@ namespace TestParse.Services
             _databaseComparator = databaseComparator;
             sourceConn = new SqlConnectionManager(sourceConnectionString);
             targetConn = new SqlConnectionManager(targetConnectionString);
+
+            _clearDataBeforeInsert = clearDataBeforeInsert;
+            _includeDatabase = includeDatabase;
+            _includeData = includeData;
         }
 
         public async Task<DatabaseComparisonResult> CompareDatabasesAsync()
         {
-            return await _databaseComparator.CompareDatabasesAsync(_sourceConnectionString, _targetConnectionString).ConfigureAwait(false);
+            return await _databaseComparator.CompareDatabasesAsync(_sourceConnectionString, _targetConnectionString, _clearDataBeforeInsert).ConfigureAwait(false);
         }
 
         public async Task GenerateScriptsAsync(DatabaseComparisonResult result)
@@ -72,11 +83,20 @@ namespace TestParse.Services
             var targetTables = await _schemaReader.GetDatabaseTablesAsync(_targetConnectionString).ConfigureAwait(false);
             var sourceTables = await _schemaReader.GetDatabaseTablesAsync(_sourceConnectionString).ConfigureAwait(false);
 
-            await _dataMigrationService.ClearAllTablesDataAsync(targetConn, [.. targetTables.Keys]);
+            var dropFKs = await _scriptGenerationService.GenerateDropAllForeignKeysScriptAsync(targetConn);
+            await _scriptExecutor.ExecuteScriptsAsync(dropFKs, "Очищен FK", targetConn);
 
-            await ExecuteSchemaScripts(comparisonResult).ConfigureAwait(false);
+            var dropIndexes = await _scriptGenerationService.GenerateDropAllIndexesScriptAsync(targetConn);
+            await _scriptExecutor.ExecuteScriptsAsync(dropIndexes, "Очищен индекс", targetConn);
 
-            await MigrateData(sourceTables).ConfigureAwait(false);
+            if (_clearDataBeforeInsert)
+                await _dataMigrationService.ClearAllTablesDataAsync(targetConn, [.. targetTables.Keys]);
+
+            if (_includeDatabase)
+                await ExecuteSchemaScripts(comparisonResult).ConfigureAwait(false);
+
+            if (_includeData)
+                await MigrateData(sourceTables).ConfigureAwait(false);
 
             await CreateIndexesAndConstraints(comparisonResult).ConfigureAwait(false);
 
@@ -96,12 +116,6 @@ namespace TestParse.Services
 
         private async Task MigrateData(Dictionary<string, List<ColumnInfo>> sourceTables)
         {
-            var dropIndexes = await _scriptGenerationService.GenerateDropAllIndexesScriptAsync(targetConn);
-            await _scriptExecutor.ExecuteScriptsAsync(dropIndexes, "Очищен некластеризованный индекс", targetConn);
-
-            var dropFKs = await _scriptGenerationService.GenerateDropAllForeignKeysScriptAsync(targetConn);
-            await _scriptExecutor.ExecuteScriptsAsync(dropFKs, "Очищен FK", targetConn);
-
             foreach (var table in sourceTables)
                 await _dataMigrationService.MigrateTableDataAsync(sourceConn, targetConn, table.Key, table.Value);
         }

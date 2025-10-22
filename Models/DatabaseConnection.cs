@@ -13,7 +13,10 @@ namespace TestParse.Models
         public string Username { get; set; }
         public string Password { get; set; }
 
-        public string ConnectionString => $"Server={Server};Database={Database};User Id={Username};Password={Password};" +
+        public string ConnectionString => $"Server={Server};" +
+            $"Database={Database};" +
+            $"User Id={Username};" +
+            $"Password={Password};" +
             $"TrustServerCertificate=true;" +
             $"Encrypt=false;";
     }

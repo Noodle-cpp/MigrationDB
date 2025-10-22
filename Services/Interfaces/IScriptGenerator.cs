@@ -21,7 +21,6 @@ namespace TestParse.Services.Interfaces
         Task<IEnumerable<string>> GenerateDropAllIndexesScriptAsync(SqlConnectionManager targetConn);
         Task<string> GenerateIdentityCountScriptAsync(SqlConnectionManager targetConn, string tableName);
         Task<string> GenerateClearDataScriptAsync(SqlConnectionManager targetConn, string tableName);
-        Task<SelectDataResult> GenerateSelectDataScriptAsync(SqlConnectionManager sourceConn, string tableName);
         Task<IEnumerable<string>> GenerateDropAllForeignKeysScriptAsync(SqlConnectionManager targetConn);
     }
 }

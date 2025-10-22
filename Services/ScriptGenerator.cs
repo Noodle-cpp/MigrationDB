@@ -26,10 +26,11 @@ namespace TestParse.Services
         {
             foreach (var table in missingTables)
             {
-                using var command = new SqlCommand(_migrationScript.CreateTableScript, sourceConn.Connection);
+                using var command = new SqlCommand(_migrationScript.GenerateCreateTableScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@TableName", table.TableName);
+                command.Parameters.AddWithValue("@SchemaName", table.SchemaName);
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
-                    throw new ArgumentException(nameof(_migrationScript.CreateTableScript));
+                    throw new ArgumentException(nameof(_migrationScript.GenerateCreateTableScript));
                 table.CreateTableScript = script;
             }
         }
@@ -38,12 +39,12 @@ namespace TestParse.Services
         {
             foreach (var column in missingColumns)
             {
-                using var command = new SqlCommand(_migrationScript.CreateAttributeScript, sourceConn.Connection);
+                using var command = new SqlCommand(_migrationScript.GenerateCreateAttributeScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@TableName", column.TableName);
                 command.Parameters.AddWithValue("@ColumnName", column.ColumnName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
-                    throw new ArgumentException(nameof(_migrationScript.CreateAttributeScript));
+                    throw new ArgumentException(nameof(_migrationScript.GenerateCreateAttributeScript));
                 column.CreateColumnScript = script;
             }
         }
@@ -52,11 +53,11 @@ namespace TestParse.Services
         {
             foreach (var schema in missingSchemas)
             {
-                using var command = new SqlCommand(_migrationScript.CreateSchemaScript, sourceConn.Connection);
+                using var command = new SqlCommand(_migrationScript.GenerateCreateSchemaScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@SchemaName", schema.SchemaName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
-                    throw new ArgumentException(nameof(_migrationScript.CreateSchemaScript));
+                    throw new ArgumentException(nameof(_migrationScript.GenerateCreateSchemaScript));
 
                 schema.CreateSchemaScript = script;
             }
@@ -66,12 +67,12 @@ namespace TestParse.Services
         {
             foreach (var column in differentColumns)
             {
-                using var command = new SqlCommand(_migrationScript.AlterAttributeScript, sourceConn.Connection);
-                command.Parameters.AddWithValue("@TableName", column.TableName);
+                using var command = new SqlCommand(_migrationScript.GenerateAlterAttributeScript, sourceConn.Connection);
+                command.Parameters.AddWithValue("@TableName", column.TableName.Split('.').Last());
                 command.Parameters.AddWithValue("@ColumnName", column.ColumnName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
-                    throw new ArgumentException(nameof(_migrationScript.AlterAttributeScript));
+                    throw new ArgumentException(nameof(_migrationScript.GenerateAlterAttributeScript));
                 column.AlterColumnScript = script;
             }
         }
@@ -80,11 +81,11 @@ namespace TestParse.Services
         {
             foreach (var fk in foreignKeys)
             {
-                using var command = new SqlCommand(_migrationScript.CreateForeignKeyScript, sourceConn.Connection);
+                using var command = new SqlCommand(_migrationScript.GenerateCreateForeignKeyScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@ForeignKeyName", fk.ForeignKeyName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
-                    throw new ArgumentException(nameof(_migrationScript.CreateForeignKeyScript));
+                    throw new ArgumentException(nameof(_migrationScript.GenerateCreateForeignKeyScript));
                 if (!string.IsNullOrEmpty(script))
                     fk.CreateForeignKeyScript = script;
             }
@@ -94,12 +95,13 @@ namespace TestParse.Services
         {
             foreach (var index in indexes)
             {
-                using var command = new SqlCommand(_migrationScript.CreateIndexScript, sourceConn.Connection);
+                using var command = new SqlCommand(_migrationScript.GenerateCreateIndexScript, sourceConn.Connection);
                 command.Parameters.AddWithValue("@IndexName", index.IndexName);
                 command.Parameters.AddWithValue("@TableName", index.TableName);
+                command.Parameters.AddWithValue("@SchemaName", index.SchemaName);
 
                 var script = (await command.ExecuteScalarAsync())?.ToString() ??
-                    throw new ArgumentException(nameof(_migrationScript.CreateIndexScript));
+                    throw new ArgumentException(nameof(_migrationScript.GenerateCreateIndexScript));
                 if (!string.IsNullOrEmpty(script))
                     index.CreateIndexScript = script;
             }
@@ -109,7 +111,7 @@ namespace TestParse.Services
         {
             var dropScripts = new List<string>();
 
-            using var command = new SqlCommand(_migrationScript.DropAllIndexesScript, targetConn.Connection, targetConn.Transaction);
+            using var command = new SqlCommand(_migrationScript.GenerateDropAllIndexesScript, targetConn.Connection, targetConn.Transaction);
             using var reader = await command.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
@@ -122,18 +124,20 @@ namespace TestParse.Services
         {
             var dropScripts = new List<string>();
 
-            using var command = new SqlCommand(_migrationScript.DropAllForeignKeysScript, targetConn.Connection, targetConn.Transaction);
+            using var command = new SqlCommand(_migrationScript.GenerateDropAllForeignKeysScript, targetConn.Connection, targetConn.Transaction);
             using var reader = await command.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
+            {
                 dropScripts.Add(reader["DropForeignKeyScript"].ToString());
+            }
 
             return dropScripts;
         }
 
         public async Task<string> GenerateIdentityCountScriptAsync(SqlConnectionManager targetConn, string tableName)
         {
-            using var command = new SqlCommand(_migrationScript.IdentityCountScript, targetConn.Connection, targetConn.Transaction);
+            using var command = new SqlCommand(_migrationScript.GenerateIdentityCountScript, targetConn.Connection, targetConn.Transaction);
             command.Parameters.AddWithValue("@TableName", tableName);
             var script = (await command.ExecuteScalarAsync())?.ToString();
 
@@ -142,26 +146,11 @@ namespace TestParse.Services
 
         public async Task<string> GenerateClearDataScriptAsync(SqlConnectionManager targetConn, string tableName)
         {
-            using var command = new SqlCommand(_migrationScript.ClearDataScript, targetConn.Connection, targetConn.Transaction);
+            using var command = new SqlCommand(_migrationScript.GenerateClearDataScript, targetConn.Connection, targetConn.Transaction);
             command.Parameters.AddWithValue("@TableName", tableName);
             var script = (await command.ExecuteScalarAsync())?.ToString();
 
             return script;
-        }
-
-        public async Task<SelectDataResult> GenerateSelectDataScriptAsync(SqlConnectionManager sourceConn, string tableName)
-        {
-            using var command = new SqlCommand(_migrationScript.SelectDataScript, sourceConn.Connection);
-            command.Parameters.AddWithValue("@TableName", tableName);
-            await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
-            await reader.ReadAsync().ConfigureAwait(false);
-
-            //TODO: Рассмотреть другие варианты, т.к. выглядит как неверное разделение ответственности из-за возврата схемы
-            return new SelectDataResult()
-            {
-                SchemaName = reader["SchemaName"].ToString(),
-                Script = reader["SelectData"].ToString()
-            };
         }
     }
 }

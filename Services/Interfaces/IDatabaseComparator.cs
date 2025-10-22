@@ -9,6 +9,6 @@ namespace TestParse.Services.Interfaces
 {
     public interface IDatabaseComparator
     {
-        Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString, string targetConnectionString);
+        Task<DatabaseComparisonResult> CompareDatabasesAsync(string sourceConnectionString, string targetConnectionString, bool clearDataBeforeInsert);
     }
 }
