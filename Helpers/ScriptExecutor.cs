@@ -28,7 +28,6 @@ namespace TestParse.Helpers
         {
             try
             {
-                _logger.LogDebug($"Начался {script}");
                 await using var command = connection.Transaction is null
                                             ? new SqlCommand(script, connection.Connection)
                                             : new SqlCommand(script, connection.Connection, connection.Transaction);
@@ -48,7 +47,6 @@ namespace TestParse.Helpers
                 _logger.LogDebug(script);
                 if (connection.Transaction is not null)
                     connection.Transaction.Rollback();
-                _logger.LogError($"Ошибка выполнения: {script}");
                 throw;
             }
         }

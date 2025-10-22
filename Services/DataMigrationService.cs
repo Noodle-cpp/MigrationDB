@@ -32,7 +32,7 @@ namespace TestParse.Services
         {
             _logger.LogInformation("Очистка данных в целевой БД...");
 
-            await DisableConstraintsAsync(targetConn).ConfigureAwait(false);
+            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.DisableConstraintsScript, $"Отключены constraints", targetConn).ConfigureAwait(false);
 
             foreach (var tableName in tableNames.AsEnumerable().Reverse())
             {
@@ -47,7 +47,7 @@ namespace TestParse.Services
                 }
             }
 
-            await EnableConstraintsAsync(targetConn).ConfigureAwait(false);
+            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.EnableConstraintsScript, $"Включены constraints", targetConn).ConfigureAwait(false);
         }
 
         public async Task MigrateTableDataAsync(SqlConnectionManager sourceConn, SqlConnectionManager targetConn, string tableName, List<ColumnInfo> columns)
@@ -61,18 +61,9 @@ namespace TestParse.Services
             }
             catch (Exception ex)
             {
+                await targetConn.RollbackAsync().ConfigureAwait(false);
                 _logger.LogError($"Ошибка переноса {tableName}: {ex.Message}");
             }
-        }
-
-        private async Task DisableConstraintsAsync(SqlConnectionManager targetConn)
-        {
-            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.DisableConstraintsScript, $"Отключены все FK constraints", targetConn).ConfigureAwait(false);
-        }
-
-        private async Task EnableConstraintsAsync(SqlConnectionManager targetConn)
-        {
-            await _scriptExecutor.ExecuteScriptAsync(_migrationScript.EnableConstraintsScript, $"Включены все FK constraints", targetConn).ConfigureAwait(false);
         }
 
         private async Task MigrateTableWithIdentityAsync(SqlConnectionManager sourceConn, SqlConnectionManager targetConn, string tableName, List<ColumnInfo> columns)
@@ -88,10 +79,6 @@ namespace TestParse.Services
             {
                 await BulkCopyTableDataAsync(sourceConn, targetConn, tableName, columns).ConfigureAwait(false);
                 _logger.LogInformation($"Данные перенесены (с IDENTITY): {tableName}");
-            }
-            catch (Exception)
-            {
-                await targetConn.RollbackAsync().ConfigureAwait(false);
             }
             finally
             {
@@ -113,10 +100,8 @@ namespace TestParse.Services
 
             var keyColumns = await GetKeyColumnsAsync(sourceConn, tableName).ConfigureAwait(false);
 
-            if (!keyColumns.Any())
-            {
+            if (keyColumns.Count == 0)
                 keyColumns = columns.Select(c => c.ColumnName).ToList();
-            }
 
             while (processedRows < totalRows)
             {
@@ -129,11 +114,12 @@ namespace TestParse.Services
                     await InsertMissingRecordsAsync(targetConn, tableName, tempTableName, columns, keyColumns).ConfigureAwait(false);
 
                     processedRows += batchSize;
+
                     _logger.LogInformation($"Прогресс {tableName}: {Math.Min(processedRows, totalRows)}/{totalRows} строк");
                 }
                 finally
                 {
-                    await DropTempTableAsync(targetConn, tempTableName).ConfigureAwait(false);
+                    await _scriptExecutor.ExecuteScriptAsync($"DROP TABLE {tempTableName}", $"Временная таблица {tempTableName} удалена", targetConn).ConfigureAwait(false);
                 }
 
                 await Task.Delay(1000);
@@ -155,27 +141,23 @@ namespace TestParse.Services
                 ORDER BY ic.key_ordinal";
 
             await using var command = new SqlCommand(sql, conn.Connection);
-            command.Parameters.AddWithValue("@TableName", tableName.Split('.').Last().Replace("[", "").Replace("]", ""));
+            command.Parameters.AddWithValue("@TableName", tableName.Split('.').Last());
 
             await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
 
             while (await reader.ReadAsync().ConfigureAwait(false))
-            {
                 keyColumns.Add(reader["ColumnName"].ToString());
-            }
 
             return keyColumns;
         }
 
         private async Task CreateTempTableAsync(SqlConnectionManager conn, string tempTableName, List<ColumnInfo> columns)
         {
-            var columnDefinitions = string.Join(", ", columns.Select(c =>
-                $"[{c.ColumnName}] {GetColumnDefinition(c)}"));
+            var columnDefinitions = string.Join(", ", columns.Select(c => $"[{c.ColumnName}] {GetColumnDefinition(c)}"));
 
             var sql = $"CREATE TABLE {tempTableName} ({columnDefinitions})";
 
-            await using var command = new SqlCommand(sql, conn.Connection, conn.Transaction);
-            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+            await _scriptExecutor.ExecuteScriptAsync(sql, $"Создана временная таблица {tempTableName}", conn).ConfigureAwait(false);
         }
 
         private string GetColumnDefinition(ColumnInfo column)
@@ -224,35 +206,23 @@ namespace TestParse.Services
         }
 
         private async Task InsertMissingRecordsAsync(SqlConnectionManager targetConn, string targetTableName,
-            string tempTableName, List<ColumnInfo> columns, List<string> keyColumns)
+                                                        string tempTableName, List<ColumnInfo> columns, List<string> keyColumns)
         {
             var targetColumns = string.Join(", ", columns.Select(c => $"[{c.ColumnName}]"));
             var tempColumns = string.Join(", ", columns.Select(c => $"src.[{c.ColumnName}]"));
 
-            var joinConditions = string.Join(" AND ", keyColumns.Select(col =>
-                $"tgt.[{col}] = src.[{col}]"));
+            var joinConditions = string.Join(" AND ", keyColumns.Select(col => $"tgt.[{col}] = src.[{col}]"));
 
             var sql = $@"
-            INSERT INTO {targetTableName} ({targetColumns})
-            SELECT {tempColumns}
-            FROM {tempTableName} src
-            WHERE NOT EXISTS (
-                SELECT 1 FROM {targetTableName} tgt 
-                WHERE {joinConditions}
-        )";
+                INSERT INTO {targetTableName} ({targetColumns})
+                SELECT {tempColumns}
+                FROM {tempTableName} src
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM {targetTableName} tgt 
+                    WHERE {joinConditions})";
 
-            await using var command = new SqlCommand(sql, targetConn.Connection, targetConn.Transaction);
-            var insertedRows = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-
-            _logger.LogInformation($"Вставлено {insertedRows} отсутствующих записей в {targetTableName}");
+            await _scriptExecutor.ExecuteScriptAsync(sql, $"Вставленно в {targetTableName}", targetConn).ConfigureAwait(false);
         }
-
-        private async Task DropTempTableAsync(SqlConnectionManager conn, string tempTableName)
-        {
-            await using var command = new SqlCommand($"DROP TABLE {tempTableName}", conn.Connection, conn.Transaction);
-            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-        }
-
 
         private async Task<long> GetTableRowCountAsync(SqlConnectionManager conn, string tableName)
         {
